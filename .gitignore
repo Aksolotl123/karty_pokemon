@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dev-dist/
+public/tesseract/
+test-results/
+playwright-report/
+*.log
+tests/e2e/fixtures/*.png
+tests/e2e/fixtures/*.jpg
+tests/e2e/fixtures/*.y4m
