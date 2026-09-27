@@ -5,8 +5,9 @@ import { SettingsView } from './components/SettingsView';
 import { Trade } from './components/Trade';
 import type { CardRef, CollectionEntry } from './lib/collection';
 import {
-  addToCollection, importEntries, loadCollection, loadSettings, requestPersistence, saveSettings, setQuantity, type Settings,
+  addToCollection, applyRemote, importEntries, loadCollection, loadSettings, requestPersistence, saveSettings, setQuantity, type Settings,
 } from './lib/storage';
+import { pushChanges, startSync, type SyncState } from './lib/sync';
 import { createApi } from './lib/tcgdex';
 
 type Tab = 'scan' | 'collection' | 'trade' | 'settings';
@@ -23,6 +24,7 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sync, setSync] = useState<SyncState>({ kind: 'off' });
   const api = useMemo(() => createApi(settings.lang), [settings.lang]);
 
   const reload = useCallback(() => loadCollection().then(setEntries), []);
@@ -30,7 +32,20 @@ export function App() {
   useEffect(() => {
     reload().catch((e) => setLoadError(`Nie udało się wczytać kolekcji: ${(e as Error).message}`));
     requestPersistence();
+    startSync({
+      getLocal: loadCollection,
+      applyRemote: async (save, remove) => {
+        if (!save.length && !remove.length) return;
+        await applyRemote(save, remove);
+        await reload();
+      },
+      onState: setSync,
+    });
   }, []);
+
+  // Błąd wysyłki nie może zablokować pracy na telefonie — dane są już zapisane lokalnie.
+  const push = (entries: CollectionEntry[], deleted: string[] = []) =>
+    pushChanges(entries, deleted).catch((e) => console.error('Synchronizacja', e));
 
   useEffect(() => {
     if (!toast) return;
@@ -46,6 +61,7 @@ export function App() {
 
   async function add(ref: CardRef, count: number) {
     const e = await addToCollection(ref, count);
+    push([e]);
     await reload();
     setToast(`Dodano: ${e.name} (masz ${e.quantity} szt.)`);
   }
@@ -69,12 +85,16 @@ export function App() {
           <Collection
             entries={entries}
             settings={settings}
-            onQuantity={async (key, q) => { await setQuantity(key, q); await reload(); }}
-            onImport={async (list) => { await importEntries(list); await reload(); }}
+            onQuantity={async (key, q) => {
+              const e = await setQuantity(key, q);
+              push(e ? [e] : [], e ? [] : [key]);
+              await reload();
+            }}
+            onImport={async (list) => { await importEntries(list); push(list); await reload(); }}
           />
         )}
         {tab === 'trade' && <Trade entries={entries} settings={settings} />}
-        {tab === 'settings' && <SettingsView settings={settings} onChange={changeSettings} />}
+        {tab === 'settings' && <SettingsView settings={settings} onChange={changeSettings} sync={sync} />}
       </main>
       {toast && <div class="toast" role="status">{toast}</div>}
       <nav class="tabs">

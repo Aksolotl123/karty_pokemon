@@ -98,6 +98,33 @@ export function makeExport(entries: CollectionEntry[], owner: string, now = new 
 const VARIANTS = new Set<string>(Object.keys(VARIANT_LABELS));
 const str = (v: unknown, max = 200): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 
+const isIsoDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v);
+
+/**
+ * Sprawdza pojedynczą pozycję pochodzącą z zewnątrz (plik znajomego, chmura).
+ * Zwraca null, gdy pozycja jest uszkodzona.
+ */
+export function sanitizeEntry(input: unknown): CollectionEntry | null {
+  const raw = input as Partial<CollectionEntry> | null;
+  if (!raw || typeof raw !== 'object' || !str(raw.cardId) || !str(raw.name) || !VARIANTS.has(raw.variant as string)) return null;
+  const quantity = Number(raw.quantity);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) return null;
+  const image = str(raw.image, 500) && /^https:\/\//.test(raw.image) ? raw.image : undefined;
+  const ref: CardRef = {
+    cardId: raw.cardId,
+    name: raw.name,
+    localId: str(raw.localId, 20) ? raw.localId : '',
+    setId: str(raw.setId) ? raw.setId : '',
+    setName: str(raw.setName) ? raw.setName : '',
+    image,
+    variant: raw.variant as Variant,
+    lang: str(raw.lang, 10) ? raw.lang : 'en',
+  };
+  const addedAt = isIsoDate(raw.addedAt) ? raw.addedAt : new Date(0).toISOString();
+  const updatedAt = isIsoDate(raw.updatedAt) ? raw.updatedAt : addedAt;
+  return { ...ref, key: entryKey(ref), quantity, addedAt, updatedAt };
+}
+
 /** Waliduje plik od znajomego — dane z zewnątrz, więc sprawdzamy każde pole. */
 export function parseExport(json: string): CollectionExport {
   let data: unknown;
@@ -110,25 +137,7 @@ export function parseExport(json: string): CollectionExport {
   if (!d || d.format !== EXPORT_FORMAT || !Array.isArray(d.entries)) {
     throw new Error('To nie jest plik kolekcji z tej aplikacji.');
   }
-  const entries: CollectionEntry[] = [];
-  for (const raw of d.entries as Partial<CollectionEntry>[]) {
-    if (!raw || !str(raw.cardId) || !str(raw.name) || !VARIANTS.has(raw.variant as string)) continue;
-    const quantity = Number(raw.quantity);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) continue;
-    const image = str(raw.image, 500) && /^https:\/\//.test(raw.image) ? raw.image : undefined;
-    const ref: CardRef = {
-      cardId: raw.cardId,
-      name: raw.name,
-      localId: str(raw.localId, 20) ? raw.localId : '',
-      setId: str(raw.setId) ? raw.setId : '',
-      setName: str(raw.setName) ? raw.setName : '',
-      image,
-      variant: raw.variant as Variant,
-      lang: str(raw.lang, 10) ? raw.lang : 'en',
-    };
-    const ts = typeof raw.addedAt === 'string' ? raw.addedAt : new Date(0).toISOString();
-    entries.push({ ...ref, key: entryKey(ref), quantity, addedAt: ts, updatedAt: ts });
-  }
+  const entries = (d.entries as unknown[]).map(sanitizeEntry).filter((e): e is CollectionEntry => e !== null);
   return {
     format: EXPORT_FORMAT,
     owner: str(d.owner, 60) ? d.owner : 'Znajomy',

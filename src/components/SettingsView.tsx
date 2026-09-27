@@ -1,12 +1,15 @@
 import type { Settings } from '../lib/storage';
+import type { SyncState } from '../lib/sync';
+import { SyncPanel } from './SyncPanel';
 
 const LANGS: [Settings['lang'], string][] = [
   ['en', 'Angielski'], ['de', 'Niemiecki'], ['fr', 'Francuski'], ['it', 'Włoski'], ['es', 'Hiszpański'], ['pt', 'Portugalski'],
 ];
 
-export function SettingsView({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+export function SettingsView({ settings, onChange, sync }: { settings: Settings; onChange: (s: Settings) => void; sync: SyncState }) {
   return (
     <section class="settings">
+      <SyncPanel state={sync} />
       <label>
         Twoje imię / ksywka (widoczne dla znajomych przy wymianie)
         <input value={settings.owner} maxLength={40} onInput={(e) => onChange({ ...settings, owner: e.currentTarget.value })} />
@@ -30,7 +33,7 @@ export function SettingsView({ settings, onChange }: { settings: Settings; onCha
           <li>Jeśli podgląd jest nieostry, użyj przycisku „Zdjęcie” — aparat robi ostrzejsze zdjęcia.</li>
           <li>Zawsze możesz poprawić nazwę/numer ręcznie i szukać ponownie.</li>
         </ul>
-        <p>Dane kart i obrazki: <a href="https://tcgdex.dev" target="_blank" rel="noopener">TCGdex</a>. Kolekcja jest zapisana tylko na tym urządzeniu.</p>
+        <p>Dane kart i obrazki: <a href="https://tcgdex.dev" target="_blank" rel="noopener">TCGdex</a>. Kolekcja jest zapisana na tym urządzeniu{sync.kind === 'off' ? '' : ' i — po zalogowaniu — w Twojej prywatnej chmurze Firebase'}.</p>
       </div>
     </section>
   );

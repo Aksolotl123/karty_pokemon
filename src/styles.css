@@ -114,3 +114,10 @@ label { display: grid; gap: 6px; font-size: 0.9rem; color: var(--muted); }
 .tabs button span { font-size: 1.3rem; }
 .tabs button.on { color: var(--accent); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom)); background: var(--ok); color: #06291a; font-weight: 600; padding: 10px 16px; border-radius: 20px; z-index: 30; max-width: calc(100% - 32px); }
+
+/* ---- Synchronizacja ---- */
+.sync { background: var(--surface); border-radius: var(--radius); padding: 4px 14px 14px; display: grid; gap: 10px; }
+.sync h3 { margin-bottom: 0; }
+.sync p { margin: 0; }
+.email-login { display: grid; gap: 8px; }
+button.link { background: none; color: var(--accent); padding: 10px 4px; text-decoration: underline; }

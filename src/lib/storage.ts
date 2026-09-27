@@ -1,6 +1,7 @@
 // Trwały zapis kolekcji w IndexedDB (na telefonie, bez serwera).
-import { createStore, del, get, set, values, setMany, update } from 'idb-keyval';
+import { createStore, del, get, promisifyRequest, set, setMany, update, values } from 'idb-keyval';
 import { addCard, type CardRef, type CollectionEntry, entryKey } from './collection';
+import type { Tombstone } from './sync-merge';
 
 const store = createStore('karty-pokemon', 'collection');
 
@@ -19,11 +20,39 @@ export async function addToCollection(ref: CardRef, count = 1): Promise<Collecti
   return result;
 }
 
-export async function setQuantity(key: string, quantity: number): Promise<void> {
-  if (quantity <= 0) return del(key, store);
+/** Zwraca zmienioną pozycję albo null, gdy została usunięta (lub nie istniała). */
+export async function setQuantity(key: string, quantity: number): Promise<CollectionEntry | null> {
+  if (quantity <= 0) {
+    await del(key, store);
+    return null;
+  }
   const e = await get<CollectionEntry>(key, store);
-  if (!e) return;
-  await set(key, { ...e, quantity, updatedAt: new Date().toISOString() }, store);
+  if (!e) return null;
+  const next = { ...e, quantity, updatedAt: new Date().toISOString() };
+  await set(key, next, store);
+  return next;
+}
+
+/**
+ * Zmiany z chmury. W jednej transakcji sprawdzamy updatedAt, żeby nie nadpisać
+ * zmiany zrobionej na telefonie w tej samej chwili.
+ */
+export async function applyRemote(save: CollectionEntry[], remove: Tombstone[]): Promise<void> {
+  if (!save.length && !remove.length) return;
+  await store('readwrite', async (s) => {
+    const current = await Promise.all(
+      [...save, ...remove].map((r) => promisifyRequest(s.get(r.key) as IDBRequest<CollectionEntry | undefined>)),
+    );
+    save.forEach((e, i) => {
+      const old = current[i];
+      if (!old || old.updatedAt < e.updatedAt) s.put(e, e.key);
+    });
+    remove.forEach((t, i) => {
+      const old = current[save.length + i];
+      if (old && old.updatedAt <= t.updatedAt) s.delete(t.key);
+    });
+    return promisifyRequest(s.transaction);
+  });
 }
 
 /** Import kopii zapasowej: zastępuje pozycje o tych samych kluczach. */

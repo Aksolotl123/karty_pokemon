@@ -40,6 +40,25 @@ rozpoznawanie tekstu działa bez internetu. Do wyszukania karty w bazie potrzebn
      w żadnym wariancie) i co Ty możesz dać jemu/jej.
 - „Wyślij listę dubli jako tekst” — gotowa wiadomość do wklejenia na grupę.
 
+## Synchronizacja w chmurze (Firebase, opcjonalnie)
+
+Bez konfiguracji aplikacja działa tylko lokalnie. Po podaniu konfiguracji Firebase w Ustawieniach
+pojawia się „Kopia w chmurze” (logowanie Google lub e-mail + hasło):
+
+- kolekcja jest w Firestore pod `users/{uid}/cards/…` — każdy widzi tylko swoją (reguły w `firestore.rules`),
+- telefon nadal trzyma pełną kopię lokalnie i działa bez internetu; zmiany wysyłają się, gdy wróci sieć,
+- przy konflikcie wygrywa nowsza zmiana danej karty; usunięcia zapisują się jako „nagrobki”, żeby inne urządzenie nie przywróciło karty,
+- przy pierwszym logowaniu kolekcje z telefonu i z chmury są łączone.
+
+Konfiguracja (jednorazowo, w [konsoli Firebase](https://console.firebase.google.com)):
+
+1. Projekt → **Dodaj aplikację → Web** → skopiuj obiekt `firebaseConfig` do `src/lib/firebase-config.ts`.
+2. **Authentication → Sign-in method**: włącz **Google** oraz **E-mail/hasło**.
+3. **Authentication → Settings → Authorized domains**: dodaj `aksolotl123.github.io`.
+4. **Firestore Database → Utwórz bazę** (tryb produkcyjny, region np. `eur3`), a w zakładce **Reguły** wklej zawartość `firestore.rules` i opublikuj.
+
+Wartości w `firebaseConfig` nie są tajne (trafiają do przeglądarki) — dane chronią reguły Firestore.
+
 ## Uruchomienie
 
 Wymagany Node.js 20+.
@@ -74,6 +93,7 @@ Na telefonie: otwórz adres → menu przeglądarki → „Dodaj do ekranu głów
 | `src/lib/ocr.ts`, `image.ts`, `geometry.ts` | OCR, wycinanie fragmentów karty, hash obrazu |
 | `src/lib/collection.ts` | model kolekcji, dublety, propozycja wymiany, eksport/import, CSV |
 | `src/lib/storage.ts` | zapis w IndexedDB, ustawienia |
+| `src/lib/sync.ts`, `sync-merge.ts` | synchronizacja z Firebase, scalanie zmian |
 | `src/components/` | ekrany: Skaner, Kolekcja, Wymiana, Ustawienia |
 
 ## Ograniczenia i pomysły na dalszy rozwój
@@ -82,6 +102,6 @@ Na telefonie: otwórz adres → menu przeglądarki → „Dodaj do ekranu głów
   Języki europejskie wybierasz w Ustawieniach.
 - Karty promo bez numeru „x/y” (np. `SWSH050`) rozpoznawane są po nazwie.
 - Skuteczność zależy od zdjęcia: dobre światło, bez odblasków (holo!), karta wypełnia ramkę.
-- Możliwe rozszerzenia: wspólna lista wymian online (np. Firebase/Supabase), ceny z
+- Możliwe rozszerzenia: wspólna lista wymian online (na bazie Firebase), ceny z
   Cardmarket (TCGdex je udostępnia), stan karty (NM/LP…), rozpoznawanie samym obrazem
   (model ML na telefonie) dla kart z nieczytelnym tekstem.

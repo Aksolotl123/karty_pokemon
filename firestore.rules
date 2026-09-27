@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Każdy zalogowany użytkownik widzi i zmienia wyłącznie własną kolekcję:
+// users/{uid}/cards/{karta}. Wszystko inne jest zablokowane.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/cards/{cardDoc} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && (isEntry(request.resource.data) || isTombstone(request.resource.data));
+    }
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isTombstone(d) {
+      return d.keys().hasOnly(['key', 'deleted', 'updatedAt'])
+        && d.key is string && d.key.size() <= 300
+        && d.deleted == true
+        && d.updatedAt is string && d.updatedAt.size() <= 40;
+    }
+
+    function isEntry(d) {
+      return d.keys().hasOnly(['key', 'cardId', 'name', 'localId', 'setId', 'setName', 'image', 'variant', 'lang', 'quantity', 'addedAt', 'updatedAt'])
+        && d.key is string && d.key.size() <= 300
+        && d.cardId is string && d.cardId.size() <= 200
+        && d.name is string && d.name.size() <= 200
+        && d.quantity is int && d.quantity >= 1 && d.quantity <= 9999
+        && d.variant in ['normal', 'reverse', 'holo', 'firstEdition']
+        && d.updatedAt is string && d.updatedAt.size() <= 40;
+    }
+  }
+}
