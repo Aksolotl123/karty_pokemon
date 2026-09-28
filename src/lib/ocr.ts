@@ -13,27 +13,33 @@ export interface OcrResult {
   rawNumber: string;
 }
 
-let workerPromise: Promise<Worker> | null = null;
+let workersPromise: Promise<[Worker, Worker]> | null = null;
 
 function assetUrl(path: string): string {
   return new URL(`${import.meta.env.BASE_URL}tesseract/${path}`, location.href).href;
 }
 
-export function getWorker(onProgress?: (p: number) => void): Promise<Worker> {
-  if (!workerPromise) {
-    workerPromise = (async () => {
-      const worker = await createWorker('eng', 1, {
-        workerPath: assetUrl('worker.min.js'),
-        corePath: assetUrl('core/'),
-        langPath: assetUrl('lang'),
-        logger: (m) => { if (m.status.startsWith('loading')) onProgress?.(m.progress); },
-      });
-      await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, preserve_interword_spaces: '1' });
-      return worker;
-    })();
-    workerPromise.catch(() => { workerPromise = null; });
+async function makeWorker(onProgress?: (p: number) => void): Promise<Worker> {
+  const worker = await createWorker('eng', 1, {
+    workerPath: assetUrl('worker.min.js'),
+    corePath: assetUrl('core/'),
+    langPath: assetUrl('lang'),
+    logger: (m) => { if (m.status.startsWith('loading')) onProgress?.(m.progress); },
+  });
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, preserve_interword_spaces: '1' });
+  return worker;
+}
+
+/**
+ * Dwa niezależne silniki OCR: nazwa i numer są czytane równocześnie na dwóch
+ * rdzeniach telefonu, co mniej więcej o połowę skraca czas rozpoznawania.
+ */
+export function getWorkers(onProgress?: (p: number) => void): Promise<[Worker, Worker]> {
+  if (!workersPromise) {
+    workersPromise = Promise.all([makeWorker(onProgress), makeWorker()]);
+    workersPromise.catch(() => { workersPromise = null; });
   }
-  return workerPromise;
+  return workersPromise;
 }
 
 interface Line { text: string; height: number }
@@ -51,11 +57,12 @@ async function readRegion(worker: Worker, src: Source, r: Rect): Promise<{ text:
 
 /** Odczytuje nazwę (górny pasek) i numer (dolny pasek) karty leżącej w prostokącie `card`. */
 export async function readCard(src: Source, card: Rect): Promise<OcrResult> {
-  const worker = await getWorker();
+  const [numberWorker, nameWorker] = await getWorkers();
   const { w, h } = sourceSize(src);
-  // Worker przetwarza zadania po kolei, więc nie ma zysku z równoległości.
-  const numberPart = await readRegion(worker, src, regionRect(card, REGIONS.number, w, h));
-  const namePart = await readRegion(worker, src, regionRect(card, REGIONS.name, w, h));
+  const [numberPart, namePart] = await Promise.all([
+    readRegion(numberWorker, src, regionRect(card, REGIONS.number, w, h)),
+    readRegion(nameWorker, src, regionRect(card, REGIONS.name, w, h)),
+  ]);
   return {
     name: extractName(namePart.lines),
     number: parseCollectorNumber(numberPart.text),

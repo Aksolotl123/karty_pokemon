@@ -60,6 +60,7 @@ export interface CardApi {
 
 export function createApi(lang: Lang, fetchImpl: Fetch = (...a) => fetch(...a), timeoutMs = 15000): CardApi {
   const setCache = new Map<string, Promise<SetDetail>>();
+  const cardCache = new Map<string, Promise<CardDetail>>();
   let setsPromise: Promise<SetBrief[]> | null = null;
 
   async function get<T>(path: string): Promise<T> {
@@ -98,7 +99,7 @@ export function createApi(lang: Lang, fetchImpl: Fetch = (...a) => fetch(...a), 
       return setsPromise;
     },
     set: (id) => cached(setCache, id, () => get<SetDetail>(`/sets/${encodeURIComponent(id)}`)),
-    card: (id) => get<CardDetail>(`/cards/${encodeURIComponent(id)}`),
+    card: (id) => cached(cardCache, id, () => get<CardDetail>(`/cards/${encodeURIComponent(id)}`)),
     async searchByName(name) {
       const q = name.trim();
       if (!q) return [];

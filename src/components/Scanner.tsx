@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { cardGuide, coverTransform, hashSimilarity, type Rect } from '../lib/geometry';
 import { identify, type Candidate } from '../lib/identify';
 import { crop, fileToCanvas, imageHash, loadImage, sourceSize } from '../lib/image';
-import { getWorker, readCard } from '../lib/ocr';
+import { getWorkers, readCard } from '../lib/ocr';
 import { cardImageUrl, type CardApi } from '../lib/tcgdex';
 import { parseCollectorNumber } from '../lib/text';
 import { AddCardSheet } from './AddCardSheet';
@@ -65,13 +65,14 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
         );
       }
     })();
-    // Wczytujemy OCR w tle, żeby pierwsze skanowanie było szybsze.
-    getWorker((p) => setOcrLoading(p < 1 ? p : null)).catch(() => setOcrLoading(null));
+    // Lista setów i OCR ładują się w tle, żeby pierwsze skanowanie było szybsze.
+    api.sets().catch(() => {});
+    getWorkers((p) => setOcrLoading(p < 1 ? p : null)).catch(() => setOcrLoading(null));
     return () => {
       cancelled = true;
       stream?.getTracks().forEach((t) => t.stop());
     };
-  }, [cameraOn]);
+  }, [cameraOn, api]);
 
   // Pozycja ramki na ekranie odpowiada ramce w pikselach wideo.
   useEffect(() => {
@@ -115,11 +116,16 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
     setPhase('searching');
     const parsedNumber = parseCollectorNumber(numberQuery);
     try {
-      let found = await identify(api, { name: nameQuery, number: parsedNumber });
+      const found = await identify(api, { name: nameQuery, number: parsedNumber });
       if (id !== searchId.current) return; // nowsze wyszukiwanie wygrywa
-      if (hashRef.current && found.length > 1) found = await rerankByImage(found, hashRef.current);
-      if (id !== searchId.current) return;
       setCandidates(found);
+      // Szczegóły (warianty) najlepszej karty pobieramy od razu — okno dodawania otworzy się bez czekania.
+      if (found[0]) api.card(found[0].card.id).catch(() => {});
+      // Gdy numer nie wskazał karty, dosortowujemy wyniki po wyglądzie — w tle, bez blokowania listy.
+      const hash = hashRef.current;
+      if (hash && found.length > 1 && !found.some((c) => c.numberMatch)) {
+        rerankByImage(found, hash).then((sorted) => { if (id === searchId.current) setCandidates(sorted); });
+      }
       if (found.length === 0) {
         setError(
           !nameQuery.trim() && !parsedNumber
@@ -268,7 +274,7 @@ async function rerankByImage(candidates: Candidate[], hash: Uint8Array): Promise
       const url = cardImageUrl(c.card.image);
       if (!url) return 0;
       try {
-        return hashSimilarity(hash, imageHash(await loadImage(url)));
+        return hashSimilarity(hash, imageHash(await loadImage(url, 3000)));
       } catch {
         return 0; // brak CORS / sieci — zostaje sama ocena z OCR
       }

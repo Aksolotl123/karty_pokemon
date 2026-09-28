@@ -19,6 +19,7 @@ export interface Candidate {
 
 const MAX_SETS_BY_TOTAL = 12;
 const MAX_RESULTS = 24;
+const DECISIVE_NAME_SIMILARITY = 0.8;
 
 /**
  * Zwraca listę kandydatów posortowaną od najlepszego.
@@ -29,6 +30,10 @@ export async function identify(api: CardApi, hint: ScanHint): Promise<Candidate[
   const name = hint.name?.trim() || null;
   const number = hint.number ?? null;
   if (!name && !number) return [];
+
+  // Wyszukiwanie po nazwie startuje od razu, równolegle z wyszukiwaniem po numerze.
+  const byNamePromise = name ? api.searchByName(name) : Promise.resolve([]);
+  byNamePromise.catch(() => {}); // błąd obsługujemy niżej — o ile w ogóle czekamy na wynik
 
   const sets = await api.sets();
   const setsById = new Map(sets.map((s) => [s.id, s]));
@@ -58,8 +63,17 @@ export async function identify(api: CardApi, hint: ScanHint): Promise<Candidate[
     });
   }
 
-  if (name) {
-    const byName = await api.searchByName(name);
+  // Numer + wielkość setu + zgodna nazwa to pewne trafienie — nie czekamy na wyszukiwanie po nazwie.
+  const decisive = name && [...found.values()].some((c) => c.numberMatch && nameSimilarity(name, c.card.name) >= DECISIVE_NAME_SIMILARITY);
+
+  if (name && !decisive) {
+    let byName: CardBrief[];
+    try {
+      byName = await byNamePromise;
+    } catch (e) {
+      if (found.size === 0) throw e; // bez wyników z numeru błąd sieci jest istotny
+      byName = [];
+    }
     for (const card of byName) {
       const set = setsById.get(setIdFromCardId(card.id));
       const numberMatch =

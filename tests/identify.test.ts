@@ -32,15 +32,16 @@ describe('identify', () => {
     expect(api.set).not.toHaveBeenCalledWith('swsh3');
   });
 
-  it('sama nazwa → wyszukiwanie po nazwie, numer daje premię', async () => {
+  it('wyszukiwanie po nazwie, numer daje premię', async () => {
     const api = fakeApi({ Charizard: [
-      { id: 'swsh3-25', localId: '25', name: 'Charizard' },
       { id: 'swsh6-25', localId: '25', name: 'Charizard' },
+      { id: 'swsh3-25', localId: '25', name: 'Charizard' },
     ] });
     const res = await identify(api, { name: 'Charizard', number: { local: '25', total: '189' } });
-    expect(res[0].card.id).toBe('swsh3-25');
-    expect(res[0].numberMatch).toBe(true);
-    expect(res[1].numberMatch).toBe(false);
+    expect(res.map((c) => [c.card.id, c.numberMatch])).toEqual([['swsh3-25', true]]);
+    const byNameOnly = await identify(api, { name: 'Charizard' });
+    expect(byNameOnly.map((c) => c.card.id)).toEqual(['swsh6-25', 'swsh3-25']);
+    expect(byNameOnly.every((c) => !c.numberMatch)).toBe(true);
   });
 
   it('numery z prefiksem (TG) dopasowuje przez nazwę', async () => {
@@ -65,5 +66,36 @@ describe('identify', () => {
     api.set = vi.fn(async (id: string) => { if (id === 'sv01') throw new Error('500'); return details[id]; });
     const res = await identify(api, { number: { local: '25', total: '198' } });
     expect(res.map((c) => c.card.id)).toEqual(['swsh6-25']);
+  });
+});
+
+describe('identify — szybka ścieżka', () => {
+  it('pewne trafienie po numerze nie czeka na wyszukiwanie po nazwie', async () => {
+    const api = fakeApi();
+    let resolveName!: (v: never[]) => void;
+    api.searchByName = vi.fn(() => new Promise<never[]>((r) => { resolveName = r; }));
+    const res = await identify(api, { name: 'Pawmi', number: { local: '025', total: '198' } });
+    expect(res[0].card.id).toBe('sv01-025');
+    expect(api.searchByName).toHaveBeenCalledTimes(1); // wystartowało równolegle…
+    resolveName([]); // …ale wynik nie był potrzebny
+  });
+
+  it('niepewna nazwa → czeka na wyszukiwanie po nazwie', async () => {
+    const api = fakeApi({ Pikachv: [{ id: 'base1-58', localId: '58', name: 'Pikachu' }] });
+    const res = await identify(api, { name: 'Pikachv', number: { local: '025', total: '198' } });
+    expect(res.map((c) => c.card.id)).toContain('base1-58');
+  });
+
+  it('błąd wyszukiwania po nazwie nie psuje wyniku z numeru', async () => {
+    const api = fakeApi();
+    api.searchByName = vi.fn(async () => { throw new Error('sieć'); });
+    const res = await identify(api, { name: 'Zupełnie inna', number: { local: '025', total: '198' } });
+    expect(res.map((c) => c.card.id)).toEqual(['sv01-025', 'swsh6-25']);
+  });
+
+  it('błąd wyszukiwania po nazwie bez wyników z numeru jest zgłaszany', async () => {
+    const api = fakeApi();
+    api.searchByName = vi.fn(async () => { throw new Error('sieć'); });
+    await expect(identify(api, { name: 'Pikachu' })).rejects.toThrow('sieć');
   });
 });
