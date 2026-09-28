@@ -36,7 +36,17 @@ async function makeWorker(onProgress?: (p: number) => void): Promise<Worker> {
  */
 export function getWorkers(onProgress?: (p: number) => void): Promise<[Worker, Worker]> {
   if (!workersPromise) {
-    workersPromise = Promise.all([makeWorker(onProgress), makeWorker()]);
+    // Drugi silnik tworzymy po pierwszym: pliki silnika są już wtedy w pamięci
+    // podręcznej, więc nie pobieramy ich dwa razy i nie podwajamy zużycia pamięci.
+    workersPromise = (async (): Promise<[Worker, Worker]> => {
+      const first = await makeWorker(onProgress);
+      try {
+        return [first, await makeWorker()];
+      } catch (e) {
+        await first.terminate();
+        throw e;
+      }
+    })();
     workersPromise.catch(() => { workersPromise = null; });
   }
   return workersPromise;

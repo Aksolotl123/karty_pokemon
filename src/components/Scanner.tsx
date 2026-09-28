@@ -67,7 +67,7 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
     })();
     // Lista setów i OCR ładują się w tle, żeby pierwsze skanowanie było szybsze.
     api.sets().catch(() => {});
-    getWorkers((p) => setOcrLoading(p < 1 ? p : null)).catch(() => setOcrLoading(null));
+    getWorkers((p) => setOcrLoading(Math.min(p, 0.99))).then(() => setOcrLoading(null), () => setOcrLoading(null));
     return () => {
       cancelled = true;
       stream?.getTracks().forEach((t) => t.stop());
