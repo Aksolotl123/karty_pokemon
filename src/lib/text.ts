@@ -121,3 +121,29 @@ export function sameLocalId(a: string, b: string): boolean {
   const norm = (s: string) => s.toUpperCase().replace(/^([A-Z]*)0*(\d)/, '$1$2');
   return norm(a) === norm(b);
 }
+
+export interface PositionedLine {
+  text: string;
+  top: number;
+  height: number;
+}
+
+/**
+ * Odczyt z całego zdjęcia, gdy nie wiemy, gdzie leży karta.
+ * Numer: najniżej położona linia z numerem „x/y” (dół karty).
+ * Nazwa: największy napis w górnej części obszaru z tekstem (górny pasek karty).
+ */
+export function parseWholeCard(lines: PositionedLine[]): { name: string | null; number: CollectorNumber | null } {
+  const withText = lines.filter((l) => l.text.trim());
+  if (!withText.length) return { name: null, number: null };
+  let number: CollectorNumber | null = null;
+  for (const l of [...withText].sort((a, b) => b.top - a.top)) {
+    number = parseCollectorNumber(l.text);
+    if (number) break;
+  }
+  const top = Math.min(...withText.map((l) => l.top));
+  const bottom = Math.max(...withText.map((l) => l.top + l.height));
+  const limit = top + (bottom - top) * 0.3;
+  const name = extractName(withText.filter((l) => l.top + l.height / 2 <= limit));
+  return { name, number };
+}

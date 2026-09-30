@@ -29,6 +29,7 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
   const [number, setNumber] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [rawOcr, setRawOcr] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState<number | null>(null);
   const [picked, setPicked] = useState<Candidate | null>(null);
   const hashRef = useRef<Uint8Array | null>(null);
@@ -101,6 +102,7 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
     setPhase('reading');
     try {
       const ocr = await readCard(src, card);
+      setRawOcr([ocr.rawName, ocr.rawNumber].filter((t, i, a) => t && a.indexOf(t) === i).join('\n---\n') || '(nic)');
       setName(ocr.name ?? '');
       setNumber(ocr.number ? `${ocr.number.local}/${ocr.number.total}` : '');
       await search(ocr.name ?? '', ocr.number ? `${ocr.number.local}/${ocr.number.total}` : '');
@@ -170,6 +172,7 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
     setNumber('');
     setCandidates([]);
     setError(null);
+    setRawOcr(null);
     hashRef.current = null;
   }
 
@@ -215,6 +218,12 @@ export function Scanner({ api, lang, active, ownedCount, onAdd }: Props) {
 
       {busy && <p class="status">{phase === 'reading' ? 'Czytam kartę…' : 'Szukam w bazie kart…'}</p>}
       {error && <p class="error">{error}</p>}
+      {rawOcr && phase === 'results' && (
+        <details class="raw-ocr">
+          <summary>Co odczytano ze zdjęcia</summary>
+          <pre>{rawOcr}</pre>
+        </details>
+      )}
 
       {phase === 'results' && candidates.length > 0 && (
         <>

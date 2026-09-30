@@ -121,3 +121,5 @@ label { display: grid; gap: 6px; font-size: 0.9rem; color: var(--muted); }
 .sync p { margin: 0; }
 .email-login { display: grid; gap: 8px; }
 button.link { background: none; color: var(--accent); padding: 10px 4px; text-decoration: underline; }
+.raw-ocr { color: var(--muted); font-size: 0.8rem; margin: 8px 0; }
+.raw-ocr pre { white-space: pre-wrap; word-break: break-word; background: var(--surface); padding: 8px; border-radius: 8px; max-height: 200px; overflow: auto; }

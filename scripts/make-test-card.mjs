@@ -37,3 +37,11 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
 const { writeFileSync } = await import('node:fs');
 writeFileSync(`${dir}camera.y4m`, Buffer.concat([Buffer.from(`YUV4MPEG2 W${W} H${H} F30:1 Ip A1:1 C420jpeg\nFRAME\n`), Y, U, V]));
 console.log('camera.y4m ok');
+
+// Typowe zdjęcie telefonem: karta na stole zajmuje ~60% wysokości kadru (nie wypełnia go).
+const smallCard = await sharp(png).resize(687, 960).toBuffer();
+await sharp({ create: { width: 1200, height: 1600, channels: 3, background: '#6b5a48' } })
+  .composite([{ input: smallCard, left: 256, top: 310 }])
+  .jpeg({ quality: 85 })
+  .toFile(`${dir}photo-small.jpg`);
+console.log('photo-small.jpg ok');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractName, nameSimilarity, parseCollectorNumber, sameLocalId } from '../src/lib/text';
+import { extractName, nameSimilarity, parseCollectorNumber, parseWholeCard, sameLocalId } from '../src/lib/text';
 
 describe('parseCollectorNumber', () => {
   it.each([
@@ -58,5 +58,22 @@ describe('sameLocalId', () => {
     expect(sameLocalId('tg05', 'TG5')).toBe(true);
     expect(sameLocalId('25', '250')).toBe(false);
     expect(sameLocalId('0', '000')).toBe(true);
+  });
+});
+
+describe('parseWholeCard', () => {
+  it('numer z najniższej linii, nazwa z góry obszaru z tekstem', () => {
+    const lines = [
+      { text: 'BASIC', top: 300, height: 12 },
+      { text: 'Pikachu HP 60', top: 315, height: 40 },
+      { text: 'Thunder Jolt 40', top: 700, height: 45 }, // duży napis, ale nisko — to atak, nie nazwa
+      { text: 'Flip a coin 10/20 damage', top: 750, height: 14 },
+      { text: 'Illus. X SVI EN 025/198', top: 1250, height: 14 },
+    ];
+    expect(parseWholeCard(lines)).toEqual({ name: 'Pikachu', number: { local: '025', total: '198' } });
+  });
+  it('puste wejście', () => {
+    expect(parseWholeCard([])).toEqual({ name: null, number: null });
+    expect(parseWholeCard([{ text: '  ', top: 0, height: 10 }])).toEqual({ name: null, number: null });
   });
 });

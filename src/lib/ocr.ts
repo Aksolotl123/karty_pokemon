@@ -4,7 +4,7 @@
 import { createWorker, PSM, type Worker } from 'tesseract.js';
 import { REGIONS, regionRect, type Rect } from './geometry';
 import { prepareForOcr, sourceSize, type Source } from './image';
-import { extractName, parseCollectorNumber, type CollectorNumber } from './text';
+import { extractName, parseCollectorNumber, parseWholeCard, type CollectorNumber, type PositionedLine } from './text';
 
 export interface OcrResult {
   name: string | null;
@@ -52,15 +52,15 @@ export function getWorkers(onProgress?: (p: number) => void): Promise<[Worker, W
   return workersPromise;
 }
 
-interface Line { text: string; height: number }
+type Line = PositionedLine;
 
-async function readRegion(worker: Worker, src: Source, r: Rect): Promise<{ text: string; lines: Line[] }> {
+async function readRegion(worker: Worker, src: Source, r: Rect, scale?: number): Promise<{ text: string; lines: Line[] }> {
   if (r.w < 4 || r.h < 4) return { text: '', lines: [] };
-  const canvas = prepareForOcr(src, r);
+  const canvas = prepareForOcr(src, r, undefined, scale);
   const { data } = await worker.recognize(canvas, {}, { text: true, blocks: true });
   const lines: Line[] = [];
   for (const b of data.blocks ?? []) for (const p of b.paragraphs) for (const l of p.lines) {
-    if (l.confidence >= 30) lines.push({ text: l.text.trim(), height: l.bbox.y1 - l.bbox.y0 });
+    if (l.confidence >= 30) lines.push({ text: l.text.trim(), top: l.bbox.y0, height: l.bbox.y1 - l.bbox.y0 });
   }
   return { text: data.text ?? '', lines };
 }
@@ -73,10 +73,25 @@ export async function readCard(src: Source, card: Rect): Promise<OcrResult> {
     readRegion(numberWorker, src, regionRect(card, REGIONS.number, w, h)),
     readRegion(nameWorker, src, regionRect(card, REGIONS.name, w, h)),
   ]);
-  return {
-    name: extractName(namePart.lines),
-    number: parseCollectorNumber(numberPart.text),
-    rawName: namePart.text.trim(),
-    rawNumber: numberPart.text.trim(),
-  };
+  let name = extractName(namePart.lines);
+  let number = parseCollectorNumber(numberPart.text);
+  let rawName = namePart.text.trim();
+  let rawNumber = numberPart.text.trim();
+
+  // Plan awaryjny: karta nie leżała tam, gdzie zakładaliśmy (np. zdjęcie, na którym
+  // karta nie wypełnia kadru) — czytamy całe zdjęcie i szukamy numeru i nazwy po położeniu.
+  if (!number || !name) {
+    const whole = await readRegion(numberWorker, src, { x: 0, y: 0, w, h }, wholeImageScale(w, h));
+    const found = parseWholeCard(whole.lines);
+    number ??= found.number ?? parseCollectorNumber(whole.text);
+    name ??= found.name;
+    rawNumber ||= whole.text.trim();
+    rawName ||= whole.text.trim();
+  }
+  return { name, number, rawName, rawNumber };
+}
+
+/** Całe zdjęcie skalujemy do ~2400 px dłuższego boku: numer pozostaje czytelny, a OCR nie trwa zbyt długo. */
+function wholeImageScale(w: number, h: number): number {
+  return Math.min(2, Math.max(0.25, 2400 / Math.max(w, h)));
 }

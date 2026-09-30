@@ -29,8 +29,8 @@ export function crop(src: Source, r: Rect, scale = 1): HTMLCanvasElement {
  * Przygotowanie wycinka do OCR: powiększenie (mały druk numeru), skala szarości,
  * rozciągnięcie kontrastu. Binaryzację robi już Tesseract.
  */
-export function prepareForOcr(src: Source, r: Rect, targetWidth = 1600): HTMLCanvasElement {
-  const scale = Math.min(4, Math.max(1, targetWidth / Math.max(1, r.w)));
+export function prepareForOcr(src: Source, r: Rect, targetWidth = 1600, fixedScale?: number): HTMLCanvasElement {
+  const scale = fixedScale ?? Math.min(4, Math.max(1, targetWidth / Math.max(1, r.w)));
   const c = crop(src, r, scale);
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
   const img = ctx.getImageData(0, 0, c.width, c.height);

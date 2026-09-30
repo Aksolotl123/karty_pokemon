@@ -93,6 +93,14 @@ test('skan ze zdjęcia', async ({ page }) => {
   await expectPikachuRecognized(page);
 });
 
+test('zdjęcie, na którym karta nie wypełnia kadru', async ({ page }) => {
+  // Typowe zdjęcie karty na stole — szybki odczyt pasków nie trafia, działa odczyt całego zdjęcia.
+  await mockApi(page);
+  await page.goto('/');
+  await page.locator('.scan-actions input[type=file]').setInputFiles(`${fixtures}photo-small.jpg`);
+  await expectPikachuRecognized(page);
+});
+
 test('ręczne wyszukiwanie i błąd sieci', async ({ page }) => {
   await page.route('https://api.tcgdex.net/**', (route) => route.abort('internetdisconnected'));
   await page.goto('/');
